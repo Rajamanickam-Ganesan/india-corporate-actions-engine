@@ -8,7 +8,7 @@ record date, calculates entitlements, processes client elections and proxy votes
 against depository and registrar credits, and routes every discrepancy to a prioritised exception queue with an
 owner, SLA and required action.
 
-![Tests](https://github.com/YOUR-USERNAME/india-corporate-actions-engine/actions/workflows/tests.yml/badge.svg)
+![Tests](https://github.com/Rajamanickam-Ganesan/india-corporate-actions-engine/actions/workflows/tests.yml/badge.svg)
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 ![Tests passed](https://img.shields.io/badge/tests-24%20passed-brightgreen)
 
