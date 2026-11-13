@@ -1,187 +1,281 @@
 # Indian Corporate Actions Processing Engine
 
-A practice version of what an **Asset Servicing / Corporate Actions** team does every day:
-check incoming corporate action events, work out which clients are entitled, process the
-events (including client elections and votes), reconcile what we expected against what the
-depository actually credited, and push every problem into an exception queue with an owner and a deadline.
+An end-to-end corporate actions processing engine for Indian equities, modelled on the daily workflow of an
+**Asset Servicing / Corporate Actions** operations team.
 
-> **All data is fake.** The company names (Reliance, Bharti Airtel, BSE, Sun Pharma, Tata Motors)
-> are real, but every event, date, ratio, price, client and amount is made up for practice.
-> The tax rules are simplified and are not tax advice.
+The engine validates an incoming corporate actions feed, determines eligible holders from settled positions on the
+record date, calculates entitlements, processes client elections and proxy votes, reconciles expected entitlements
+against depository and registrar credits, and routes every discrepancy to a prioritised exception queue with an
+owner, SLA and required action.
+
+![Tests](https://github.com/YOUR-USERNAME/india-corporate-actions-engine/actions/workflows/tests.yml/badge.svg)
+![Python](https://img.shields.io/badge/python-3.10%2B-blue)
+![Tests passed](https://img.shields.io/badge/tests-24%20passed-brightgreen)
+
+**Tech stack:** Python · pandas · NumPy · openpyxl · Streamlit · pytest · GitHub Actions
+
+![Control Room](screenshots/control_room.png)
 
 ---
 
-## What it covers
+## Key features
 
-| Area | What the engine does |
+| Area | Capability |
 |---|---|
-| **Event validation** | Checks every vendor event before processing: supported type, required fields, **duplicates from two vendors**, positive amounts/ratios, date order, cost split = 100%, stock actually held |
-| **Record-date eligibility** | Uses **settled** holdings under **T+1**. A share bought *on* the record date is not eligible; a share sold *on* the record date still is |
-| **Mandatory events** | Bonus (1:1, 2:1), cash dividend with **TDS**, demerger with **cost-of-acquisition split** |
-| **Voluntary events** | Rights issue (subscribe / renounce / lapse, default lapse), AGM e-voting |
-| **Instruction checks** | Over-election, late instruction, instruction from a non-holder, no instruction received |
-| **Vote checks** | Over-voting (capped at holding), no vote received |
-| **Reconciliation** | Expected vs depository/registrar credits: share shortfalls, missing credits, **wrong TDS rate** |
-| **Exception queue** | Reason code, severity, owner team, SLA due date, required action |
-| **Controls** | Cost basis preserved, total cost explained, no over-processing, every break raised |
-| **Outputs** | 13-sheet Excel report, client notification per event per client, Streamlit dashboard |
+| **Event validation** | Checks every vendor event before processing: supported event type, required fields, duplicate events from multiple vendors, positive amounts and ratios, date sequencing, cost apportionment totalling 100%, and whether any client holds the security |
+| **Record-date eligibility** | Determines entitlement from **settled** holdings under the **T+1** settlement cycle. A purchase on the record date is not eligible; a sale on the record date retains the entitlement |
+| **Mandatory events** | Bonus issues, cash dividends with **TDS** by client tax status, demergers with **cost-of-acquisition apportionment** |
+| **Voluntary events** | Rights issues (subscribe / renounce / lapse, with default lapse) and AGM e-voting |
+| **Instruction management** | Detects over-elections, late instructions, instructions from ineligible holders and missing instructions |
+| **Proxy voting** | Caps votes at the eligible holding on the cut-off date and flags non-voting holders |
+| **Reconciliation** | Compares expected entitlements with depository/registrar credits: share shortfalls, missing credits and incorrect TDS deductions |
+| **Exception management** | Each exception carries a reason code, severity, owner team, SLA due date and required action |
+| **Controls** | Cost-basis preservation, full cost explanation, no over-processing of elections or votes, complete reconciliation coverage |
+| **Reporting** | 13-sheet Excel report, client notifications per event and account, and an interactive Streamlit control dashboard |
 
 ---
 
-## The fake scenario
+## Test scenario
 
-**5 clients**
+I designed a synthetic dataset covering five Indian large-cap stocks — Reliance Industries, Bharti Airtel, BSE,
+Sun Pharmaceutical and Tata Motors — to exercise every processing rule and control. Events, dates, prices, client
+accounts and amounts are simulated and do not represent actual corporate announcements.
 
-| Account | Client | Type | Why it is interesting |
-|---|---|---|---|
-| CLT001 | Priya Sharma | Resident individual | Small dividend - below TDS threshold |
-| CLT002 | Arjun Mehta | Resident individual, **no PAN** | Higher TDS rate (20%) |
-| CLT003 | Kavya Nair | Non-resident | 20% TDS, no threshold |
-| CLT004 | Shakti Growth Mutual Fund | Mutual fund | TDS exempt |
-| CLT005 | Indus Traders Pvt Ltd | Company | 10% TDS |
+### Client accounts
 
-**10 events in the feed (6 good, 4 deliberately bad)**
+| Account | Client type | Processing consideration |
+|---|---|---|
+| CLT001 | Resident individual | Dividend below the TDS threshold |
+| CLT002 | Resident individual, PAN not on file | Higher TDS rate (20%) |
+| CLT003 | Non-resident | 20% TDS with no threshold |
+| CLT004 | Mutual fund | TDS exempt |
+| CLT005 | Resident company | Standard 10% TDS |
 
-| Event | Stock | Type | Result |
-|---|---|---|---|
-| CA-2026-0001 | RELIANCE | 1:1 bonus | Processed |
-| CA-2026-0002 | BHARTIARTL | 1:14 rights issue at Rs 1,200 | Processed (with client elections) |
-| CA-2026-0003 | BSE | 2:1 bonus | Processed |
-| CA-2026-0004 | BSE | Same bonus again from Vendor B | **Flagged - duplicate** |
-| CA-2026-0005 | SUNPHARMA | Rs 8 dividend | Processed (with TDS) |
-| CA-2026-0006 | SUNPHARMA | AGM e-voting, 3 resolutions | Processed (with client votes) |
-| CA-2026-0007 | TATAMOTORS | 1:1 demerger into TMCV, cost split 65/35 | Processed |
-| CA-2026-0008 | RELIANCE | Dividend of **-Rs 6** | **Flagged - invalid amount** |
-| CA-2026-0009 | INFY | Dividend | **Flagged - no client holds it** |
-| CA-2026-0010 | BHARTIARTL | Pay date before record date | **Flagged - date sequence** |
+### Corporate actions feed
 
-**Problems planted on purpose**
+| Event | Security | Event type | ISO 15022 | Outcome |
+|---|---|---|---|---|
+| CA-2026-0001 | RELIANCE | 1:1 bonus issue | BONU | Processed |
+| CA-2026-0002 | BHARTIARTL | 1:14 rights issue at ₹1,200 | RHDI/EXRI | Processed with client elections |
+| CA-2026-0003 | BSE | 2:1 bonus issue | BONU | Processed |
+| CA-2026-0004 | BSE | Same bonus received from a second vendor | BONU | **Flagged – duplicate event** |
+| CA-2026-0005 | SUNPHARMA | ₹8 final dividend | DVCA | Processed with TDS |
+| CA-2026-0006 | SUNPHARMA | AGM e-voting, 3 resolutions | MEET | Processed with client votes |
+| CA-2026-0007 | TATAMOTORS | 1:1 demerger into TMCV, 65/35 cost split | SOFF | Processed |
+| CA-2026-0008 | RELIANCE | Dividend received with a negative amount | DVCA | **Flagged – invalid amount** |
+| CA-2026-0009 | INFY | Dividend on a security with no client holdings | DVCA | **Flagged – not held** |
+| CA-2026-0010 | BHARTIARTL | Pay date before record date | DVCA | **Flagged – date sequence** |
 
-- Trades around record dates to test T+1 eligibility (`data/trades.csv`, column `test_purpose`)
-- CLT002 elects 11 rights shares but has only 10 entitlements (150 ÷ 14 = 10.71, fraction dropped)
-- CLT004's rights instruction arrives after the client deadline
-- CLT005 bought on the record date and still sends an instruction
-- CLT003 sends no rights instruction - default lapse
-- CLT001 votes 400 shares but holds 200
-- Depository credits CLT005 only 150 Reliance bonus shares instead of 300
-- Registrar deducts 10% TDS for CLT002 (should be 20%, no PAN) and for the mutual fund (should be 0%)
-- CLT003's TMCV demerger shares never arrive
+### Exception scenarios built into the data
 
-**Run results**
+- **Settlement timing:** trades placed the day before, on, and after record dates to test T+1 eligibility
+- **Over-election:** a client elects 11 rights shares against an entitlement of 10 (150 ÷ 14 = 10.71, fraction dropped)
+- **Late instruction:** a rights election received after the client deadline but before the market deadline
+- **Ineligible instruction:** an election from a client whose purchase settled after the record date
+- **Missing instruction:** no election received — default lapse applied
+- **Over-voting:** a client votes 400 shares while holding 200 on the cut-off date
+- **Short credit:** depository credits 150 bonus shares against an entitlement of 300
+- **Incorrect TDS:** registrar applies 10% to a client without PAN (should be 20%) and to a TDS-exempt mutual fund
+- **Missing credit:** demerger shares not credited to one account
+
+### Results
 
 | Metric | Result |
 |---|---|
 | Events received / processed / flagged | 10 / 6 / 4 |
 | Straight-through processing (STP) rate | 60% |
 | Expected credits / matched / breaks | 21 / 17 / 4 (81% match rate) |
-| Exceptions | 14 (9 High, 3 Medium, 2 Low) |
-| Controls | 8 of 8 pass |
+| Exceptions raised | 14 (9 High, 3 Medium, 2 Low) |
+| Control checks | 8 of 8 passed |
+| Automated tests | 24 of 24 passed |
 
 ---
 
-## How the processing works
+## Processing workflow
 
 ```
-events_feed.csv
-      │
-      ▼
-1. VALIDATION ────────── bad event ──────────────┐
-      │ good events (sorted by record date)        │
-      ▼                                            │
-2. ELIGIBILITY  apply trades settled by record date│
-      │         (T+1) -> who holds what            │
-      ▼                                            ▼
-3. PROCESSING   bonus / dividend+TDS / demerger    EXCEPTION QUEUE
-      │         rights + client elections ──── problem ──▶ (reason code,
-      │         AGM + client votes                         severity, owner,
-      ▼                                                    SLA due date,
-4. RECONCILIATION  expected vs depository_credits ─ break ─▶ action)
-      │
-      ▼
-5. CONTROLS + AUDIT LOG + NOTIFICATIONS + EXCEL + DASHBOARD
+Corporate actions feed
+        │
+        ▼
+1. EVENT VALIDATION ───────── invalid event ─────────────┐
+        │ valid events (in record-date order)              │
+        ▼                                                  │
+2. ELIGIBILITY        apply trades settled by record date  │
+        │             (T+1) → eligible holders             │
+        ▼                                                  ▼
+3. PROCESSING         bonus · dividend + TDS · demerger    EXCEPTION QUEUE
+        │             rights + client elections ── issue ─▶ reason code · severity
+        │             AGM + client votes                    owner · SLA due date
+        ▼                                                   required action
+4. RECONCILIATION     expected vs depository credits ─ break ─▶
+        │
+        ▼
+5. CONTROLS · AUDIT LOG · CLIENT NOTIFICATIONS · EXCEL REPORT · DASHBOARD
 ```
 
-Key rules, with examples from the data:
+### Processing rules (worked examples from the dataset)
 
-- **Bonus** - shares go up, total cost stays the same.
-  CLT004 BSE: 1,200 shares → +2,400 bonus = 3,600; cost per share falls from Rs 2,200 to Rs 733.33.
-- **Dividend** - cash = shares × rate, minus TDS.
-  CLT002 Sun Pharma: 3,000 × Rs 8 = Rs 24,000; no PAN → 20% TDS = Rs 4,800; net Rs 19,200.
-- **Demerger** - new shares created; original cost split by the issuer's ratio.
-  CLT001: 250 TATAMOTORS (cost Rs 1,75,000) → keeps 250 TATAMOTORS at 65% (Rs 1,13,750) + gets 250 TMCV at 35% (Rs 61,250).
-- **Rights** - entitlements = holding ÷ 14, fractions dropped; client chooses; unused rights lapse.
-  CLT001: 700 ÷ 14 = 50 rights → subscribes 30 (pays Rs 36,000), renounces 20.
-- **Cost control** - opening cost + trades + rights money paid must equal the final book cost exactly.
+| Event | Rule | Example |
+|---|---|---|
+| **Bonus** | Shares increase; total cost unchanged; cost per share falls | CLT004 BSE: 1,200 + 2,400 bonus = 3,600 shares; cost per share ₹2,200 → ₹733.33 |
+| **Cash dividend** | Gross = shares × rate; TDS by tax status; net credited | CLT002 Sun Pharma: 3,000 × ₹8 = ₹24,000; no PAN → 20% TDS ₹4,800; net ₹19,200 |
+| **Demerger** | New shares created; original cost apportioned by issuer ratio | CLT001: 250 TATAMOTORS (₹1,75,000) → 250 TATAMOTORS at 65% (₹1,13,750) + 250 TMCV at 35% (₹61,250) |
+| **Rights issue** | Entitlement = holding ÷ ratio, fractions dropped; client elects; unused rights lapse | CLT001: 700 ÷ 14 = 50 rights → subscribes 30 (₹36,000), renounces 20 |
+| **Cost control** | Opening cost + trades + rights subscriptions = final book cost | Verified to the paisa on every run |
+
+---
+
+## Testing
+
+The project includes **24 automated tests** (pytest), each verifying one business rule. Tests run automatically
+on every push through GitHub Actions.
+
+**Result: 24 passed, 0 failed**
+
+| Area | What is tested | Tests | Result |
+|---|---|:---:|:---:|
+| **Settlement & eligibility** | T+1 settlement skips weekends | 1 | ✅ Pass |
+| | Purchase on record date is not eligible | 1 | ✅ Pass |
+| | Purchase the day before record date is eligible | 1 | ✅ Pass |
+| | Sale on record date retains the entitlement | 1 | ✅ Pass |
+| **Entitlement calculation** | Rights fraction dropped (150 ÷ 14 = 10 rights) | 1 | ✅ Pass |
+| | 2:1 bonus calculated correctly (1,200 → 2,400 bonus) | 1 | ✅ Pass |
+| | Demerger cost split preserves total cost (65% / 35%) | 1 | ✅ Pass |
+| **Dividend TDS** | Resident below threshold → 0% · No PAN → 20% · Non-resident → 20% · Mutual fund → exempt · Company → 10% | 5 | ✅ Pass |
+| **Event validation** | Duplicate event · negative amount · security not held · pay date before record date | 4 | ✅ Pass |
+| | Duplicate bonus is not applied twice | 1 | ✅ Pass |
+| **Instructions & voting** | Over-election capped at entitlement | 1 | ✅ Pass |
+| | Over-vote capped at eligible holding | 1 | ✅ Pass |
+| **Reconciliation** | Short share credit · incorrect TDS (×2) · missing demerger credit | 4 | ✅ Pass |
+| **Controls** | All 8 control checks pass | 1 | ✅ Pass |
+| **Total** | | **24** | **✅ 24 passed** |
+
+<details>
+<summary>Full test output</summary>
+
+```
+$ python -m pytest -v
+
+test_t_plus_1_settlement_skips_weekend PASSED
+test_buy_on_record_date_is_not_eligible PASSED
+test_buy_day_before_record_date_is_eligible PASSED
+test_sell_on_record_date_keeps_entitlement PASSED
+test_rights_fraction_is_dropped PASSED
+test_bonus_2_for_1 PASSED
+test_demerger_cost_split_preserves_total PASSED
+test_dividend_tds[RESIDENT_INDIVIDUAL-Y-1600-0] PASSED
+test_dividend_tds[RESIDENT_INDIVIDUAL-N-24000-4800] PASSED
+test_dividend_tds[NON_RESIDENT-Y-4000-800] PASSED
+test_dividend_tds[MUTUAL_FUND-Y-160000-0] PASSED
+test_dividend_tds[RESIDENT_COMPANY-Y-20000-2000] PASSED
+test_bad_events_are_flagged[CA-2026-0004-DUPLICATE_EVENT] PASSED
+test_bad_events_are_flagged[CA-2026-0008-INVALID_AMOUNT] PASSED
+test_bad_events_are_flagged[CA-2026-0009-TICKER_NOT_HELD] PASSED
+test_bad_events_are_flagged[CA-2026-0010-DATE_SEQUENCE] PASSED
+test_duplicate_bonus_not_applied_twice PASSED
+test_over_election_is_capped PASSED
+test_over_vote_is_capped PASSED
+test_recon_breaks_found[CA-2026-0001-CLT005-QTY_BREAK] PASSED
+test_recon_breaks_found[CA-2026-0005-CLT002-TDS_MISMATCH] PASSED
+test_recon_breaks_found[CA-2026-0005-CLT004-TDS_MISMATCH] PASSED
+test_recon_breaks_found[CA-2026-0007-CLT003-NOT_RECEIVED] PASSED
+test_all_controls_pass PASSED
+
+============================== 24 passed ==============================
+```
+</details>
+
+---
+
+## Dashboard
+
+The Streamlit control dashboard provides nine views: Control Room, Event Validation, Eligibility & Entitlements,
+Instructions & Votes, Reconciliation, Exception Queue, Audit & Controls, Positions, and Client Notifications.
+
+| Exception Queue | Reconciliation |
+|---|---|
+| ![Exception Queue](screenshots/exception_queue.png) | ![Reconciliation](screenshots/reconciliation.png) |
 
 ---
 
 ## Project structure
 
 ```
-india-ca-engine/
-├── data/                         <- inputs (edit these to create new scenarios)
-│   ├── accounts.csv              clients and tax status
-│   ├── securities.csv            stock master
-│   ├── opening_positions.csv     holdings on 1-Jan-2026
+india-corporate-actions-engine/
+├── data/                         input files
+│   ├── accounts.csv              client accounts and tax status
+│   ├── securities.csv            security master
+│   ├── opening_positions.csv     opening holdings
 │   ├── trades.csv                trades around record dates
-│   ├── events_feed.csv           vendor corporate action feed
+│   ├── events_feed.csv           vendor corporate actions feed
 │   ├── client_instructions.csv   rights elections and AGM votes
-│   └── depository_credits.csv    what NSDL/CDSL/registrar actually credited
+│   └── depository_credits.csv    depository and registrar credits
 ├── ca_engine/
-│   ├── config.py                 all business rules: TDS, tolerances, exception catalogue
-│   ├── validation.py             step 1 - event scrubbing
-│   ├── position_book.py          settled holdings and cost
-│   ├── processors.py             step 3 - one function per event type
-│   ├── tax.py                    simplified dividend TDS
-│   ├── reconciliation.py         step 4 - expected vs received
-│   ├── exceptions.py             exception record builder
-│   ├── notifications.py          client notices
-│   ├── reporting.py              Excel + CSV output
-│   └── pipeline.py               runs everything in order + controls + KPIs
-├── tests/test_engine.py          24 tests, one per business rule
+│   ├── config.py                 business rules: TDS, tolerances, exception catalogue
+│   ├── validation.py             event validation
+│   ├── position_book.py          settled holdings and cost basis
+│   ├── processors.py             event processing, one function per event type
+│   ├── tax.py                    dividend TDS
+│   ├── reconciliation.py         expected vs received
+│   ├── exceptions.py             exception records
+│   ├── notifications.py          client notifications
+│   ├── reporting.py              Excel and CSV reporting
+│   └── pipeline.py               orchestration, controls and KPIs
+├── tests/test_engine.py          24 automated tests, one per business rule
+├── .github/workflows/tests.yml   runs the tests automatically on every push
+├── screenshots/                  dashboard screenshots
 ├── app.py                        Streamlit dashboard
 └── run.py                        command-line run
 ```
 
 ---
 
-## How to run
+## Getting started
 
 ```bash
+python3 -m venv .venv
+source .venv/bin/activate          # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 
-python run.py               # runs everything, prints a summary, writes outputs/
-python -m pytest -q         # runs the 24 tests
-streamlit run app.py        # opens the dashboard at http://localhost:8501
+python run.py                      # run the engine and print a summary
+python -m pytest -q                # run the test suite
+streamlit run app.py               # launch the dashboard at http://localhost:8501
 ```
 
-Outputs:
-- `outputs/corporate_actions_report.xlsx` - 13 sheets (Summary, Event_Validation, Eligibility, Entitlements, Instructions, Votes, Cash_Ledger, Reconciliation, Exceptions, Audit_Log, Controls, Opening/Final positions)
-- `outputs/notifications/` - one notice per event per client (27 files)
-- `outputs/csv/` - every table as CSV
+### Outputs
+
+- `outputs/corporate_actions_report.xlsx` — Summary, Event Validation, Eligibility, Entitlements, Instructions,
+  Votes, Cash Ledger, Reconciliation, Exceptions, Audit Log, Controls, Opening and Final Positions
+- `outputs/notifications/` — one client notification per event and account
+- `outputs/csv/` — every output table in CSV format
 
 ---
 
-## Simplifications (good interview talking points)
+## Design assumptions
 
-- Only weekends are non-business days - a real system loads the NSE holiday calendar.
-- Ex-date = record date (true under T+1 in India). Shares are credited at processing time, not on the allotment date.
-- TDS: one dividend per company per year assumed for the threshold; surcharge, cess and treaty rates ignored.
-- Rights: fully paid shares; renounced entitlements are not valued or sold; fractional entitlements are simply dropped.
-- Bonus cost is spread across all shares (portfolio view). For Indian tax, bonus shares have a nil cost of acquisition.
-- No fixed income events in this version.
+- Business days exclude weekends only; a production system would use the NSE trading-holiday calendar.
+- Ex-date equals record date, consistent with T+1 settlement in India. Entitlements are booked at processing time
+  rather than on the allotment date.
+- TDS logic is simplified: the threshold is applied per event, and surcharge, cess and treaty rates are excluded.
+- Rights shares are fully paid; renounced entitlements are not valued; fractional entitlements are dropped.
+- Bonus cost is spread across all shares (portfolio accounting view). For Indian income-tax purposes, bonus shares
+  carry a nil cost of acquisition.
 
-## Possible extensions
+## Roadmap
 
-Fixed income coupons and redemptions · partly-paid rights and call money · SLA breach ageing · ISO 15022
-MT564/MT565/MT566 message parsing · loading real events from NSE · NSE holiday calendar · database storage.
+- Fixed income events: coupons, redemptions and calls
+- Partly-paid rights issues and call-money processing
+- SLA ageing and breach reporting
+- ISO 15022 MT564 / MT565 / MT566 message parsing
+- NSE trading-holiday calendar
+- Database storage and user-uploaded event files
 
 ---
 
-## Credit
+## Acknowledgements
 
-Inspired by the design of
-[ludmila-abd/corporate-actions-simulator](https://github.com/ludmila-abd/corporate-actions-simulator)
-(validation → processing → exception queue → reconciliation → dashboard).
-This project is written from scratch for the Indian market and adds record-date settlement eligibility,
-multi-client processing, TDS, rights elections, AGM voting, depository reconciliation and client notifications.
+The overall workflow design (validation → processing → exception queue → reconciliation → dashboard) was inspired by
+[ludmila-abd/corporate-actions-simulator](https://github.com/ludmila-abd/corporate-actions-simulator).
+This project is an independent implementation for the Indian market, extending the concept with record-date
+settlement eligibility, multi-account processing, TDS, rights elections, AGM voting, depository reconciliation and
+client notifications.
