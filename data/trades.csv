@@ -1,0 +1,7 @@
+trade_id,account_id,ticker,side,quantity,price,trade_date,test_purpose
+TRD-001,CLT002,RELIANCE,BUY,50,1450.00,2026-02-13,Bought the day before record date - settles ON record date so it IS eligible
+TRD-002,CLT003,RELIANCE,SELL,100,1480.00,2026-02-16,Sold ON record date - settles the day after so seller STILL gets the bonus
+TRD-003,CLT005,BHARTIARTL,BUY,140,1700.00,2026-03-10,Bought ON record date - settles after it so NOT eligible for rights
+TRD-004,CLT001,BSE,BUY,30,2500.00,2026-04-17,Bought ON record date - NOT eligible for bonus
+TRD-005,CLT001,SUNPHARMA,SELL,200,1750.00,2026-05-14,Sold the day before record date - settled out so NOT paid dividend on these
+TRD-006,CLT002,TATAMOTORS,BUY,300,690.00,2026-06-11,Bought the day before record date - IS eligible for demerger shares

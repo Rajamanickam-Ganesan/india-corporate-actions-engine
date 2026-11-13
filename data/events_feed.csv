@@ -1,0 +1,11 @@
+event_id,source,ticker,event_type,iso_caev,mand_volu,announcement_date,ex_date,record_date,pay_date,ratio_new,ratio_old,cash_amount,offer_price,new_ticker,parent_cost_pct,child_cost_pct,renunciation_deadline,client_deadline,market_deadline,description
+CA-2026-0001,Vendor A,RELIANCE,BONUS,BONU,MAND,2026-01-20,2026-02-16,2026-02-16,2026-02-17,1,1,,,,,,,,,1:1 bonus issue (1 new share for every 1 held)
+CA-2026-0002,Vendor A,BHARTIARTL,RIGHTS,RHDI/EXRI,VOLU,2026-02-10,2026-03-10,2026-03-10,2026-04-06,1,14,,1200.00,,,,2026-03-24,2026-03-26,2026-03-31,Rights issue 1:14 at Rs 1200 per share (fully paid)
+CA-2026-0003,Vendor A,BSE,BONUS,BONU,MAND,2026-03-25,2026-04-17,2026-04-17,2026-04-20,2,1,,,,,,,,,2:1 bonus issue (2 new shares for every 1 held)
+CA-2026-0004,Vendor B,BSE,BONUS,BONU,MAND,2026-03-25,2026-04-17,2026-04-17,2026-04-20,2,1,,,,,,,,,2:1 bonus issue - same event sent again by a second vendor
+CA-2026-0005,Vendor A,SUNPHARMA,CASH_DIVIDEND,DVCA,MAND,2026-04-28,2026-05-15,2026-05-15,2026-06-05,,,8.00,,,,,,,,Final dividend Rs 8.00 per share
+CA-2026-0006,Vendor A,SUNPHARMA,MEETING,MEET,VOLU,2026-04-28,2026-05-22,2026-05-22,2026-05-29,,,,,,,,,2026-05-27,2026-05-28,AGM e-voting - 3 resolutions - cut-off date 22 May
+CA-2026-0007,Vendor A,TATAMOTORS,DEMERGER,SOFF,MAND,2026-05-05,2026-06-12,2026-06-12,2026-06-26,1,1,,,TMCV,65.00,35.00,,,,Demerger of CV business - 1 TMCV share for every 1 TATAMOTORS share
+CA-2026-0008,Vendor A,RELIANCE,CASH_DIVIDEND,DVCA,MAND,2026-07-01,2026-07-20,2026-07-20,2026-08-10,,,-6.00,,,,,,,,Final dividend - vendor sent a NEGATIVE amount (bad data)
+CA-2026-0009,Vendor A,INFY,CASH_DIVIDEND,DVCA,MAND,2026-07-05,2026-07-24,2026-07-24,2026-08-14,,,21.00,,,,,,,,Dividend on a stock none of our clients hold
+CA-2026-0010,Vendor B,BHARTIARTL,CASH_DIVIDEND,DVCA,MAND,2026-07-15,2026-08-14,2026-08-14,2026-08-07,,,4.00,,,,,,,,Interim dividend - pay date is BEFORE record date (bad data)

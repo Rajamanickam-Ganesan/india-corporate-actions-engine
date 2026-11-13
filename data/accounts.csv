@@ -1,0 +1,6 @@
+account_id,client_name,client_type,pan_available,notes
+CLT001,Priya Sharma,RESIDENT_INDIVIDUAL,Y,Retail client - small holdings
+CLT002,Arjun Mehta,RESIDENT_INDIVIDUAL,N,PAN not on file - higher TDS applies
+CLT003,Kavya Nair,NON_RESIDENT,Y,NRI client - no treaty documents on file
+CLT004,Shakti Growth Mutual Fund,MUTUAL_FUND,Y,Institutional client - TDS exempt
+CLT005,Indus Traders Pvt Ltd,RESIDENT_COMPANY,Y,Corporate client
